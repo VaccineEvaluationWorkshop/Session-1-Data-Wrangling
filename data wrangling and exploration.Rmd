@@ -1,0 +1,393 @@
+---
+title: "Country-specific analysis of individual-level data"
+author: "Dan Weinberger"
+date: "May 13, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Install development version from GitHub. This requires that the 'devtools'
+# package be installed.
+if (!require("devtools")) {
+  install.packages("devtools")
+}
+devtools::install_github("weinbergerlab/ExcessILI", upgrade =  F)
+library(ExcessILI)
+```
+
+## Import data
+These datasets contain the individual-level mortality records for each country. The files were initially stored as Microsoft Excel databases; however the files were quite large and unwieldy, so they have been converted to the R data format (.rds), which stores the data more efficiently.
+
+*The last 2 letters on the file name indicate the country*
+
+If you are using a PC, save the .rds file for your country in the same directory as this .Rmd file. If you are using a mac, you will need to change the directory below.
+```{r cars}
+d1<-readRDS('./Data/IndividualICD10_br.rds')
+```
+
+Format the date variable
+```{r}
+d1$date<- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
+```
+
+
+##Look at structure of the data
+```{r}
+head(d1)
+```
+
+Get the variable names of the data
+
+```{r}
+names(d1)
+```
+
+
+
+### Then do some basic explorations. 
+What is the distibution of ages? 
+```{r hist1}
+hist(d1$age_m)
+```
+
+What is the distribution of Age *groups*
+```{r hist2}
+hist(d1$Age.group)
+```
+
+What is the distribution of dates?
+```{r hist3}
+hist(d1$date, breaks=10)
+```
+
+### Which codes are the most commonly used in this database?
+Make a table of the codes, sorted most to least common. Try to modify this and look at the distribution of secondary DX codes (e.g., DX2,)
+
+```{r freq.codes, echo=FALSE}
+tab1 <- table(d1$dx1)
+
+sort(tab1, decreasing=T)
+
+```
+
+## And let's make a code for each of the ICD10 chapters to see bigger-picture patterns
+```{r}
+chapter.prim<-substr(d1$dx1,1,1)
+```
+
+**Remember** if you ever want to see the full data frame, just type "View(DATAFRAMENAME) so in this case, View(d1)
+
+
+
+Frequency of each ICD10 chapter
+```{r}
+tab2 <- table(chapter.prim)
+
+sort(tab2, decreasing = T)
+```
+
+## Let's look at deaths due to pneumonia
+
+Extract first 3 digits from DX1 ICD10 code and save as a vector called icd10.3digits
+```{r}
+d1$icd10.3digits<-substr(d1$dx1,1,3) #extract 1st 3 digits from IC10 code
+```
+
+view the first 10 entries
+```{r}
+d1$icd10.3digits[1:10] 
+```
+
+Now we are going to create a variable to flag all deaths that have a code between J12 and J1
+```{r}
+d1$j12_j18<-rep(0, nrow(d1)) #Initialize variable with 0s
+```
+
+Replace with 1 if the 3 digit ICD10 dx1 is J12,J13,J14,J15,J16,J17,J18 (note there are more efficient ways to code this using greater than and less than symbols)
+
+```{r}
+d1$j12_j18[d1$icd10.3digits %in% c('J12', 'J13', 'J14', 'J15', 'J16', 'J17', 'J18') ]<-1
+```
+
+## Let's aggregate now by date
+We sum the 0/1 variable we created for J12_J18 by date. this counts the number of cases per time period
+```{r}
+d2 <-
+  aggregate(d1$j12_j18, 
+            by = list('date' = d1$date), 
+            FUN = sum) #sum by date
+```
+
+## Plot your time series
+```{r}
+ plot(d2, #names of variable
+      type='l', #'l' for line plot
+      bty='l' #turn off the top and right border
+      )
+```
+
+##Now let's stratify by age group data
+0 if <2 mo
+1 if 2-11 mo
+2 if 12-23 mo
+3 if 24-59 mo
+
+Generate some labels that can be used later for plotting
+```{r}
+#Create labels we can use 
+age.labels<-c('<2m','2-11m','12-23m','24-59m')
+```
+
+Aggregate variable J12_18 by age group and date
+```{r}
+d3<-aggregate(d1$j12_j18, by=list('agec'=d1$Age.group,'date'=d1$date), FUN=sum) #break dataset into smaller datasets by date and agec
+```
+
+Change variable names
+```{r}
+names(d3)<-c('agec','date','J12_18')
+```
+
+
+sort the rows of the data frame by age and date
+```{r}
+d3<-d3[order(d3$agec, d3$date),] 
+```
+
+When you want to repeat an operation, like plotting, on multiple groups, one approach is to split the dataset into smaller datasets (1 for each age group), and then use a loop or an lapply() function to repeat the operation on each smaller dataset
+
+Here we split the dataset d3 into 4 smaller datasets, and these are saved in a list called d3.spl
+```{r}
+d3.spl<-split(d3,d3$agec) 
+```
+
+How many groups are there?
+```{r}
+N.groups <- length(d3.spl)
+print(N.groups)
+```
+
+We can then make a line plot for each of the subgroups. We do this here in a 'for loop', which repeats everything between for(){} 4 times. If you want to change the size of the plots, modify fig.width and fig.height in the first line of the chunk below.
+```{r, fig.width=6, fig.height=6}
+
+par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
+
+
+for(i in 1:N.groups){
+  x<-d3.spl[[i]] #select which subgroup you want
+    plot(x$date, x$J12_18, #x-y plot
+       bty='l', #turn off right and top border of plot
+       type='l', #line plot
+       ylab='Number of pneumonia deaths', #label y axis
+       xlab='Date', #label x axis
+       main=age.labels[i] #add title
+       )
+}
+```
+
+An alternative way to code this is to use a **function**. We can write a function called 'plotfun', and use lapply to run this for each of the 4 datasets in d3.spl
+
+Write the function
+```{r}
+plotfun <- function(K){
+      x<-d3.spl[[K]] #select which subgroup you want
+      plot(x$date, x$J12_18, #x-y plot
+       bty='l', #turn off right and top border of plot
+       type='l', #line plot
+       ylab='Number of pneumonia deaths', #label y axis
+       xlab='Date', #label x axis
+       main=age.labels[K] #add title
+       )}
+```
+
+call the function
+```{r, fig.width=6, fig.height=6}
+par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
+lapply(1:N.groups,plotfun)
+```
+
+
+
+## Now we need to extract some control variables
+1) Flag any record that has a potential pneumococcal-related code anywhere in the record
+
+dx.all <- d1[,c("dx1","dx2","dx3","dx4","dx5","dx6")] 
+Creates a cut of data that just has the DX codes
+
+```{r}
+dx.all <- d1[,c("dx1","dx2","dx3","dx4","dx5","dx6")] 
+```
+
+We are interested in codes in the range between J12, J18
+```{r}
+J12_code_range <- c("J12", "J13", "J14", "J15", "J16", "J17", "J18")
+```
+
+For each observation (row), search for the J12-J18 codes in the first 3 digits of each of the DX codes
+```{r}
+d1$J12_J18_any <-  1 * apply(dx.all,
+                             1, #Repeat by row/observation
+                             function(x) {
+                               max(J12_code_range %in%
+                                 substr(x, 1, 3)
+                               )
+                             })
+```
+
+Then create a variable that flags codes that are possibly related to pneumococcus
+Here are some codes that might be pneumococcal-related
+```{r}
+other.related.dx <-
+  c("A40","A49","B953","R652","H10","H65", 
+    "H66","G00","G01","G02","G03","G04","J12", "J13",
+    "J14", "J15", "J16", "J17", "J18" )
+```
+
+then search row by row again for matches ot these codes
+```{r}
+d1$possible_pneumo_code <-  1 * apply(dx.all,
+                             1, #Repeat by row/observation
+                             function(x) {
+                               max(other.related.dx %in%
+                                 substr(x, 1, 3)
+                               )
+                             })
+```
+
+And let's create another control variable that consists of the A00-B99 chapter. We will flag a record IF it has codes in the range A00-B99 and does NOT have any pneumococcal-related codes OR any rotavirus-related codes. This is important because rotavirus vaccine was introduced around the same time, and rotavirus diarrhea declined. If we included that in the control, it could mask the benefits of PCVs because the comparison and the disease of interest of both declining, but for different reasons
+
+A00-B99 primary cause of death:
+Search for the letter A or B in DX1, and set to 1 if it is there
+```{r}
+
+d1$A00_B99_prim <-  1 * apply(dx.all[,'dx1', drop=F],
+                             1, #Repeat by row/observation
+                             function(x) {
+                               max(c('A','B') %in%
+                                 substr(x, 1, 1)
+                               )
+                             })
+
+#Set=0 if A00-A09
+d1$A00_B99_prim[substr(d1$dx1, 1, 2) =="A0"] <- 0
+
+#Set=0 if possible pneumococcal code
+d1$A00_B99_prim[d1$possible_pneumo_code==1] <- 0
+```
+
+Check your work. We should expect to see that these two categories are mutually exclusive (shouldn't have possible pneumo code=1 and A00_B99_prim==1)
+```{r}
+table(d1$A00_B99_prim, d1$possible_pneumo_code) # Good.
+```
+
+Also extract some more specific sub-chapter codes
+```{r}
+#flags Dx1 if it starts with A1
+d1$A15_A19_prim <-  1 * apply(dx.all[,'dx1', drop=F],
+                             1, #Repeat by row/observation
+                             function(x) {
+                               max(c('A1') %in%
+                                 substr(x, 1, 2)
+                               )
+                             })
+
+#Set=0 if possible pneumococcal code
+d1$A15_A19_prim[d1$possible_pneumo_code==1] <- 0
+
+```
+Check your work
+```{r}
+table(d1$A15_A19_prim, d1$possible_pneumo_code)
+```
+
+And let's add in a few more controls. for each of these, we are using broad ICD10 chapters based on the starting letter For example, all primary codes that start with P or Q, or R. And for each of these we exclude the death if a potential pneumococcal code is anywhere on the record.
+```{r}
+d1$p_prim<- 1*(substr(d1$dx1,1,1)=='P') #logical test for whether code starts with P
+d1$p_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is present
+
+d1$q_prim<- 1*(substr(d1$dx1,1,1)=='Q') #logical test for whether code starts with P
+d1$q_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is present
+
+d1$r_prim<- 1*(substr(d1$dx1,1,1)=='R') #logical test for whether code starts with P
+d1$r_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is present
+
+d1$w_prim<- 1*(substr(d1$dx1,1,1)=='W') #logical test for whether code starts with P
+d1$w_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is present
+
+d1$g_prim<- 1*(substr(d1$dx1,1,1)=='G') #logical test for whether code starts with P
+d1$g_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is present
+
+```
+
+## Now aggregate the outcome and the controls
+
+We could do this similar to how we did it previously. 
+```{r, eval=F}
+d2<-aggregate(d1[ ,c('j12_j18','A15_A19_prim','A00_B99_prim','p_prim','q_prim','r_prim','w_prim','g_prim')], by=list('agec'=d1$agec, 'date'=d1$date), FUN=sum)
+```
+
+Or we could do it using the ts_format function in the package ExcessILI
+
+```{r}
+d1$state <- 'BR'
+d2 <- ts_format(d1,
+                datevar='date',
+                agevar='agec',
+                statevar='state',
+                syndromes=c('j12_j18','A15_A19_prim','A00_B99_prim','p_prim','q_prim','r_prim','w_prim','g_prim'), resolution='month')
+```
+
+
+Check the structure of the data
+```{r}
+str(d2)
+```
+
+
+
+## Just about ready to start some analyses
+
+We need to do some data transformations. To do this, we will again split the full dataset up into smaller pieces by age group and then repeat the operation on these small pieces
+```{r}
+d2.spl<-split(d2, d2$agec) #split the dataset up by age group
+```
+
+#let's log transform and scale the control time series
+This is done automatically as part of the InterventionEvaluatR package
+```{r}
+d2.spl<- lapply(d2.spl, function(x) {
+  y<-apply(x[,4:ncol(x)],2, function(x2) scale(log(x2+0.5)) )
+  z<-cbind.data.frame(x[,1:3],y)
+  return(z)
+}
+)
+```
+
+Plot the controls
+```{r, fig.width=6, fig.height=6}
+par(mfrow=c(2,2))
+lapply(d2.spl, function(x){
+matplot(x[,4:ncol(x)], type='l', bty='l')
+
+  })
+```
+
+That's it. Now we have a clean dataset that we are ready to analyze in the next session! 
+
+There are functions that can help with these tasks as well. For example the 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
