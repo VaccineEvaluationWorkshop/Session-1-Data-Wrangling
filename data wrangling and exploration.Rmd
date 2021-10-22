@@ -14,6 +14,7 @@ if (!require("devtools")) {
 }
 devtools::install_github("weinbergerlab/ExcessILI", upgrade =  F)
 library(ExcessILI)
+library(ggplot2)
 ```
 
 ## Import data
@@ -23,13 +24,13 @@ These datasets contain the individual-level mortality records for each country. 
 
 If you are using a PC, save the .rds file for your country in the same directory as this .Rmd file. If you are using a mac, you will need to change the directory below.
 ```{r cars}
-d1<-readRDS('./Data/IndividualICD10_mx.rds')
+d1 <- readRDS('./Data/IndividualICD10_mx.rds')
 
 ```
 
 Format the date variable
 ```{r}
-d1$date<- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
+d1$date <- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
 ```
 
 
@@ -138,25 +139,35 @@ age.labels<-c('<2m','2-11m','12-23m','24-59m')
 
 Aggregate variable J12_18 by age group and date
 ```{r}
-d3<-aggregate(d1$j12_j18, by=list('agec'=d1$Age.group,'date'=d1$date), FUN=sum) #break dataset into smaller datasets by date and agec
+d3 <- aggregate(d1$j12_j18, by=list('agec'=d1$Age.group,'date'=d1$date), FUN=sum) #break dataset into smaller datasets by date and agec
 ```
 
 Change variable names
 ```{r}
-names(d3)<-c('agec','date','J12_18')
+names(d3) <- c('agec','date','J12_18')
 ```
+
+Add labels to age categories after converting to a factor
+
+```{r}
+d3$agec <- as.factor(d3$agec)
+
+d3$agec <- factor(d3$agec, levels=c('0','1','2','3'), 
+                  labels=c('<2m','2-11m','12-23m','24-59m'))
+```
+
 
 
 sort the rows of the data frame by age and date
 ```{r}
-d3<-d3[order(d3$agec, d3$date),] 
+d3 <- d3[order(d3$agec, d3$date),] 
 ```
 
 When you want to repeat an operation, like plotting, on multiple groups, one approach is to split the dataset into smaller datasets (1 for each age group), and then use a loop or an lapply() function to repeat the operation on each smaller dataset
 
 Here we split the dataset d3 into 4 smaller datasets, and these are saved in a list called d3.spl
 ```{r}
-d3.spl<-split(d3,d3$agec) 
+d3.spl <- split(d3,d3$agec) 
 ```
 
 How many groups are there?
@@ -168,8 +179,8 @@ print(N.groups)
 We can then make a line plot for each of the subgroups. We do this here in a 'for loop', which repeats everything between for(){} 4 times. If you want to change the size of the plots, modify fig.width and fig.height in the first line of the chunk below.
 ```{r, fig.width=6, fig.height=6}
 
-par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
 
+par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
 
 for(i in 1:N.groups){
   x<-d3.spl[[i]] #select which subgroup you want
@@ -182,6 +193,29 @@ for(i in 1:N.groups){
        )
 }
 ```
+
+```{r, fig.width=6, fig.height=6}
+
+
+ts.plot.fun <- function(time.var=date, yvar,multiple_group=F, group.var, vax.intro.date=as.Date('2006-01-01') ){
+  p1 <- ggplot(d3, aes_string(x=time.var, y=yvar)) +
+      geom_line() +
+      ylab("Number of pneumonia deaths") +
+      xlab("Date") +
+      theme_classic() +
+      theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90)) +
+      geom_vline(xintercept=vax.intro.date, col='gray', lty=2) +
+  
+        facet_wrap(group.var , scales='free') +
+        theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90)) 
+
+  return(p1)
+}
+  
+  ts.plot.fun(time.var='date', yvar='J12_18', multiple_group = T, group.var='agec')
+
+```
+
 
 
 An alternative way to code this is to use a **function**. We can write a function called 'plotfun', and use lapply to run this for each of the 4 datasets in d3.spl
@@ -355,23 +389,23 @@ d2.spl<-split(d2, d2$Age.group) #split the dataset up by age group
 This is done automatically as part of the InterventionEvaluatR package
 ```{r}
 d2.spl<- lapply(d2.spl, function(x) {
-  y<-apply(x[,4:ncol(x)],2, function(x2) scale(log(x2+0.5)) )
-  z<-cbind.data.frame(x[,1:3],y)
+  y<-apply(x[,6:ncol(x)],2, function(x2) scale(log(x2+0.5)) )
+  z<-cbind.data.frame(x[,c('Age.group','date','state','j12_j18')],y)
   return(z)
 }
 )
 ```
 
-Plot the controls
+Plot the controls. From these plots, it looks like the counts fall off sharply in the last few months, which likely indicates a delay in reporting to the system. We might want to exclude more recent time periods to avoid bias related to reporting delays.
 ```{r, fig.width=6, fig.height=6}
 par(mfrow=c(2,2))
 lapply(d2.spl, function(x){
-matplot(x[,4:ncol(x)], type='l', bty='l')
+matplot(x[,5:ncol(x)], type='l', bty='l')
 
   })
 ```
 
-That's it. Now we have a clean dataset that we are ready to analyze in the next session! 
+That's it. Now we have a mostly clean dataset that we are ready to analyze in the next session!
 
 There are functions that can help with these tasks as well. For example the 
 
