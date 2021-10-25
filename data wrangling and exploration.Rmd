@@ -17,6 +17,7 @@ library(ExcessILI)
 library(ggplot2)
 library(reshape2)
 library(dplyr)
+
 ```
 
 ## Import data
@@ -35,7 +36,6 @@ Format the date variable
 d1$date <- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
 ```
 
-
 ##Look at structure of the data
 ```{r}
 head(d1)
@@ -45,6 +45,11 @@ Get the variable names of the data
 
 ```{r}
 names(d1)
+```
+
+Format the date variable
+```{r}
+d1$date<- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
 ```
 
 
@@ -390,8 +395,8 @@ e2 <- ts_format(d1,
                 agevar='Age.group',
                 statevar='state',
                 syndromes=c('j12_j18','A15_A19_prim','A00_B99_prim','p_prim','q_prim','r_prim','w_prim','g_prim'), resolution='month')
-```
 
+```
 
 Check the structure of the data
 ```{r}
