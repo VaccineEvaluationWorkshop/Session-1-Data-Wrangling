@@ -15,6 +15,8 @@ if (!require("devtools")) {
 devtools::install_github("weinbergerlab/ExcessILI", upgrade =  F)
 library(ExcessILI)
 library(ggplot2)
+library(reshape2)
+library(dplyr)
 ```
 
 ## Import data
@@ -109,20 +111,40 @@ d1$j12_j18[d1$icd10.3digits %in% c('J12', 'J13', 'J14', 'J15', 'J16', 'J17', 'J1
 ```
 
 ## Let's aggregate now by date
-We sum the 0/1 variable we created for J12_J18 by date. this counts the number of cases per time period
+We sum the 0/1 variable we created for J12_J18 by date. this counts the number of cases per time period. Here we are using 'pipes'
 ```{r}
-d2 <-
-  aggregate(d1$j12_j18, 
-            by = list('date' = d1$date), 
-            FUN = sum) #sum by date
+
+
+d2 <- d1 %>% #creating a new data frame called 'd2', input data frame d1
+    group_by(date) %>%    #group by date
+    summarize('j12_j18' = sum(j12_j18) )  #take the sum of j12_18 across all values of the data
+
+
 ```
 
 ## Plot your time series
+
+First, a basic, ugly plot
+
 ```{r}
- plot(d2, #names of variable
-      type='l', #'l' for line plot
-      bty='l' #turn off the top and right border
-      )
+
+ p1 <- ggplot(d2, aes(x=date, y=j12_j18)) + #define the data frame and x and y variables
+      geom_line()   #say that you want a line plot
+ 
+ p1
+```
+Let's make it look nicer...
+
+```{r}
+
+ p2 <- ggplot(d2, aes(x=date, y=j12_j18)) +
+      geom_line(col='blue')  +
+      ylab("Number of pneumonia deaths") +  #add y axis label
+      xlab("Date") +   #add x axis label
+      theme_classic() +  #choose a 'theme'
+      geom_vline(xintercept=as.Date('2006-01-01'), col='gray', lty=2) #add reference line for vaccine introduction
+ 
+ p2
 ```
 
 ##Now let's stratify by age group data
@@ -139,7 +161,11 @@ age.labels<-c('<2m','2-11m','12-23m','24-59m')
 
 Aggregate variable J12_18 by age group and date
 ```{r}
-d3 <- aggregate(d1$j12_j18, by=list('agec'=d1$Age.group,'date'=d1$date), FUN=sum) #break dataset into smaller datasets by date and agec
+
+d3 <- d1 %>% #creating a new data frame called 'd3', input data frame d1
+    group_by(Age.group, date) %>%    #group by date
+    summarize('j12_j18' = sum(j12_j18) ) %>% #take the sum of j12_18 across all values of the data
+    ungroup()
 ```
 
 Change variable names
@@ -160,84 +186,64 @@ d3$agec <- factor(d3$agec, levels=c('0','1','2','3'),
 
 sort the rows of the data frame by age and date
 ```{r}
-d3 <- d3[order(d3$agec, d3$date),] 
+d3 <- d3 %>%
+  arrange(agec, date) #sort by agec then by date
 ```
 
-When you want to repeat an operation, like plotting, on multiple groups, one approach is to split the dataset into smaller datasets (1 for each age group), and then use a loop or an lapply() function to repeat the operation on each smaller dataset
+## Plot by group
 
-Here we split the dataset d3 into 4 smaller datasets, and these are saved in a list called d3.spl
-```{r}
-d3.spl <- split(d3,d3$agec) 
-```
-
-How many groups are there?
-```{r}
-N.groups <- length(d3.spl)
-print(N.groups)
-```
-
-We can then make a line plot for each of the subgroups. We do this here in a 'for loop', which repeats everything between for(){} 4 times. If you want to change the size of the plots, modify fig.width and fig.height in the first line of the chunk below.
-```{r, fig.width=6, fig.height=6}
-
-
-par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
-
-for(i in 1:N.groups){
-  x<-d3.spl[[i]] #select which subgroup you want
-    plot(x$date, x$J12_18, #x-y plot
-       bty='l', #turn off right and top border of plot
-       type='l', #line plot
-       ylab='Number of pneumonia deaths', #label y axis
-       xlab='Date', #label x axis
-       main=age.labels[i] #add title
-       )
-}
-```
+Previously we made a single time series plot. Now we want to make a plot for each age group. We can do this with a 'facet wrap". We will modify the code that we wrote earlier. 
 
 ```{r, fig.width=6, fig.height=6}
 
+#These first lines of code are identical to what we had earlier
+p3 <- ggplot(d3, aes(x=date, y=J12_18)) +
+      geom_line(col='blue')  +
+      ylab("Number of pneumonia deaths") +  #add y axis label
+      xlab("Date") +   #add x axis label
+      theme_classic() +  #choose a 'theme'
+      geom_vline(xintercept=as.Date('2006-01-01'), col='gray', lty=2) + #add reference line for vaccine introduction
+ 
+  #These last few lines
+      facet_wrap(~agec, scales='free_y') + #different plot for each age group, each with unique scale (scale='free')
+      theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90))
+  
+p3 #print the plot
+```
 
-ts.plot.fun <- function(time.var=date, yvar,multiple_group=F, group.var, vax.intro.date=as.Date('2006-01-01') ){
+
+For future use, we could save this code as a generic function, which we could then call easily with different variable names and groups
+
+Define the function 'ts.plot.fun'. Note that this looks very similar to the code above, except we are subbing in the real variable names with placeholders. 
+```{r}
+
+
+ts.plot.fun <- function(time.var=date, yvar,multiple_group=F, group.var, vax.intro.date ){
   p1 <- ggplot(d3, aes_string(x=time.var, y=yvar)) +
       geom_line() +
       ylab("Number of pneumonia deaths") +
       xlab("Date") +
       theme_classic() +
-      theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90)) +
       geom_vline(xintercept=vax.intro.date, col='gray', lty=2) +
   
-        facet_wrap(group.var , scales='free') +
+        facet_wrap(group.var , scales='free_y') +
         theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90)) 
 
   return(p1)
 }
   
-  ts.plot.fun(time.var='date', yvar='J12_18', multiple_group = T, group.var='agec')
-
 ```
 
-
-
-An alternative way to code this is to use a **function**. We can write a function called 'plotfun', and use lapply to run this for each of the 4 datasets in d3.spl
-
-Write the function
-```{r}
-plotfun <- function(K){
-      x<-d3.spl[[K]] #select which subgroup you want
-      plot(x$date, x$J12_18, #x-y plot
-       bty='l', #turn off right and top border of plot
-       type='l', #line plot
-       ylab='Number of pneumonia deaths', #label y axis
-       xlab='Date', #label x axis
-       main=age.labels[K] #add title
-       )}
-```
-
-call the function
+Call the function
 ```{r, fig.width=6, fig.height=6}
-par(mfrow=c(2,2)) #make a plot with arrangement of 2 rows and 2 columns
-lapply(1:N.groups,plotfun)
+  ts.plot.fun(time.var='date', 
+              yvar='J12_18', 
+              multiple_group = T, 
+              group.var='agec',
+              vax.intro.date = as.Date('2006-01-01'))
+
 ```
+
 
 
 
@@ -356,14 +362,30 @@ d1$g_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is pr
 
 We could do this similar to how we did it previously. 
 ```{r, eval=F}
-d2<-aggregate(d1[ ,c('j12_j18','A15_A19_prim','A00_B99_prim','p_prim','q_prim','r_prim','w_prim','g_prim')], by=list('agec'=d1$Age.group, 'date'=d1$date), FUN=sum)
+
+e2 <- d1 %>%
+  group_by(Age.group, date) %>%
+  summarize(j12_j18 = sum(j12_j18) ,
+            A15_A19_prim = sum(A15_A19_prim),
+            A00_B99_prim = sum(A00_B99_prim),
+            p_prim = sum(p_prim),
+            q_prim = sum(q_prim),
+            r_prim = sum(r_prim),
+            w_prim = sum(w_prim),
+            g_prim = sum(g_prim),
+            all.visits = n()
+            ) %>%
+  ungroup()
+
+names(e2)[1:2] <- c('agec','date')
+  
 ```
 
-Or we could do it using the ts_format function in the package ExcessILI
+ALTERNATIVELY: we could do it using the ts_format function in the package ExcessILI
 
 ```{r}
 d1$state <- 'BR'
-d2 <- ts_format(d1,
+e2 <- ts_format(d1,
                 datevar='date',
                 agevar='Age.group',
                 statevar='state',
@@ -373,41 +395,70 @@ d2 <- ts_format(d1,
 
 Check the structure of the data
 ```{r}
-str(d2)
+str(e2)
 ```
 
 
 
 ## Just about ready to start some analyses
 
-We need to do some data transformations. To do this, we will again split the full dataset up into smaller pieces by age group and then repeat the operation on these small pieces
-```{r}
-d2.spl<-split(d2, d2$Age.group) #split the dataset up by age group
-```
+We just need to do some data transformations. To do this, we will use some pipes...we will group by age, then log transform and scale the variables(mean=0, sd=1)
 
-#let's log transform and scale the control time series
-This is done automatically as part of the InterventionEvaluatR package
+
 ```{r}
-d2.spl<- lapply(d2.spl, function(x) {
-  y<-apply(x[,6:ncol(x)],2, function(x2) scale(log(x2+0.5)) )
-  z<-cbind.data.frame(x[,c('Age.group','date','state','j12_j18')],y)
-  return(z)
+
+#define a function to scale the vairables
+scale_fun <- function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
 }
-)
+
+e2 <- e2 %>%
+  group_by(Age.group) %>%
+  mutate(   log_A15_A19_prim = scale_fun(log(A15_A19_prim+0.5)),
+            log_A00_B99_prim = scale_fun(log(A00_B99_prim+0.5)),
+            log_p_prim = scale_fun(log(p_prim+0.5)),
+            log_q_prim = scale_fun(log(q_prim+0.5)),
+            log_r_prim = scale_fun(log(r_prim+0.5)),
+            log_w_prim = scale_fun(log(w_prim+0.5)),
+            log_g_prim = scale_fun(log(g_prim+0.5)),
+            log_all.visits = scale_fun(log(all.visits+0.5))
+  ) %>%
+  ungroup()
+
 ```
 
-Plot the controls. From these plots, it looks like the counts fall off sharply in the last few months, which likely indicates a delay in reporting to the system. We might want to exclude more recent time periods to avoid bias related to reporting delays.
-```{r, fig.width=6, fig.height=6}
-par(mfrow=c(2,2))
-lapply(d2.spl, function(x){
-matplot(x[,5:ncol(x)], type='l', bty='l')
 
-  })
+
+
+Reshape the dataset from 'wide' to 'long'
+```{r}
+
+#identify the columns named 'log'
+
+log_var_names <- names(e2)[grep('log_',names(e2))]  #grep searches for the string 'log_' among the column names, returns the position, and we we that to extract that names
+
+
+e2.m <- reshape2::melt(e2[,c('Age.group','date',log_var_names)], id.vars=c('Age.group','date'))
+
+```
+
+Plot the controls
+
+```{r}
+p4 <- ggplot(e2.m, aes(x=date, y=value, group=variable)) +
+      geom_line(col='blue')  +
+      ylab("Death by cause") +  #add y axis label
+      xlab("Date") +   #add x axis label
+      theme_classic() +  #choose a 'theme'
+      geom_vline(xintercept=as.Date('2006-01-01'), col='gray', lty=2) + #add reference line for vaccine introduction
+      facet_wrap(~Age.group, scales='free_y') + #different plot for each age group, each with unique scale (scale='free')
+      theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90))
+
+p4
 ```
 
 That's it. Now we have a mostly clean dataset that we are ready to analyze in the next session!
 
-There are functions that can help with these tasks as well. For example the 
 
 
 
