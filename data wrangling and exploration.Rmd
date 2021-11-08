@@ -380,7 +380,7 @@ e2 <- d1 %>%
             g_prim = sum(g_prim),
             all.visits = n()
             ) %>%
-  ungroup()
+  ungroup() 
 
 names(e2)[1:2] <- c('agec','date')
   
@@ -404,6 +404,12 @@ str(e2)
 ```
 
 
+**Important note **
+It is critical for the analysis that every time period for every stratum is represented. If there were no case/deaths that occur for a particular group in a given time period, a 0 should be included. One way to do this is wih the complete() function. for example if we want to make sure j12_18 and A15_19 columns have a row for each age group and date combination:
+   d1   %>%
+      ungroup %>%
+      complete(Age.group, date) %>%
+      fill = list(j12_j18=0, A15_A19_prim=0  )
 
 ## Just about ready to start some analyses
 
