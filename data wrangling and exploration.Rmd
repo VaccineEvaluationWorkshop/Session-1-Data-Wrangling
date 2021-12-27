@@ -17,7 +17,7 @@ library(ExcessILI)
 library(ggplot2)
 library(reshape2)
 library(dplyr)
-
+library(tidyr)
 ```
 
 ## Import data
@@ -112,7 +112,7 @@ d1$j12_j18<-rep(0, nrow(d1)) #Initialize variable with 0s
 Replace with 1 if the 3 digit ICD10 dx1 is J12,J13,J14,J15,J16,J17,J18 (note there are more efficient ways to code this using greater than and less than symbols)
 
 ```{r}
-d1$j12_j18[d1$icd10.3digits %in% c('J12', 'J13', 'J14', 'J15', 'J16', 'J17', 'J18') ]<-1
+d1$j12_j18[d1$icd10.3digits %in% c('J12', 'J13', 'J14', 'J15', 'J16', 'J17', 'J18') ] <- 1
 ```
 
 ## Let's aggregate now by date
@@ -223,8 +223,8 @@ Define the function 'ts.plot.fun'. Note that this looks very similar to the code
 ```{r}
 
 
-ts.plot.fun <- function(time.var=date, yvar,multiple_group=F, group.var, vax.intro.date ){
-  p1 <- ggplot(d3, aes_string(x=time.var, y=yvar)) +
+ts.plot.fun <- function(ds, time.var=date, yvar,multiple_group=F, group.var, vax.intro.date ){
+  p1 <- ggplot(ds, aes_string(x=time.var, y=yvar)) +
       geom_line() +
       ylab("Number of pneumonia deaths") +
       xlab("Date") +
@@ -241,7 +241,8 @@ ts.plot.fun <- function(time.var=date, yvar,multiple_group=F, group.var, vax.int
 
 Call the function
 ```{r, fig.width=6, fig.height=6}
-  ts.plot.fun(time.var='date', 
+  ts.plot.fun(ds=d3,
+              time.var='date', 
               yvar='J12_18', 
               multiple_group = T, 
               group.var='agec',
@@ -366,7 +367,7 @@ d1$g_prim[d1$possible_pneumo_code==1]<-0 #don't count of pneumococcal code is pr
 ## Now aggregate the outcome and the controls
 
 We could do this similar to how we did it previously. 
-```{r, eval=F}
+```{r}
 
 e2 <- d1 %>%
   group_by(Age.group, date) %>%
@@ -386,31 +387,31 @@ names(e2)[1:2] <- c('agec','date')
   
 ```
 
-ALTERNATIVELY: we could do it using the ts_format function in the package ExcessILI
-
-```{r}
-d1$state <- 'BR'
-e2 <- ts_format(d1,
-                datevar='date',
-                agevar='Age.group',
-                statevar='state',
-                syndromes=c('j12_j18','A15_A19_prim','A00_B99_prim','p_prim','q_prim','r_prim','w_prim','g_prim'), resolution='month')
-
-```
-
 Check the structure of the data
 ```{r}
 str(e2)
 ```
 
-
 **Important note **
 It is critical for the analysis that every time period for every stratum is represented. If there were no case/deaths that occur for a particular group in a given time period, a 0 should be included. One way to do this is wih the complete() function. for example if we want to make sure j12_18 and A15_19 columns have a row for each age group and date combination:
-   d1   %>%
-      ungroup %>%
-      complete(Age.group, date) %>%
-      fill = list(j12_j18=0, A15_A19_prim=0  )
 
+```{r}
+
+e2 <-  e2   %>%
+      group_by(agec) %>%
+      complete(date=seq.Date( from=min(e2$date, na.rm=T), to=max(e2$date, na.rm=T), by='month')) %>%
+      replace_na( list(j12_j18=0,                   
+                       A15_A19_prim=0 ,                  
+                       A00_B99_prim=0,                  
+                       p_prim=0,                  
+                       q_prim=0,                  
+                       r_prim=0,                  
+                       w_prim=0,                  
+                       g_prim=0,                  
+                       all.visits=0)) %>%
+  ungroup()
+
+```
 ## Just about ready to start some analyses
 
 We just need to do some data transformations. To do this, we will use some pipes...we will group by age, then log transform and scale the variables(mean=0, sd=1)
@@ -424,7 +425,7 @@ scale_fun <- function(x){
 }
 
 e2 <- e2 %>%
-  group_by(Age.group) %>%
+  group_by(agec) %>%
   mutate(   log_A15_A19_prim = scale_fun(log(A15_A19_prim+0.5)),
             log_A00_B99_prim = scale_fun(log(A00_B99_prim+0.5)),
             log_p_prim = scale_fun(log(p_prim+0.5)),
@@ -449,20 +450,20 @@ Reshape the dataset from 'wide' to 'long'
 log_var_names <- names(e2)[grep('log_',names(e2))]  #grep searches for the string 'log_' among the column names, returns the position, and we we that to extract that names
 
 
-e2.m <- reshape2::melt(e2[,c('Age.group','date',log_var_names)], id.vars=c('Age.group','date'))
+e2.m <- reshape2::melt(e2[,c('agec','date',log_var_names)], id.vars=c('agec','date'))
 
 ```
 
 Plot the controls
 
 ```{r}
-p4 <- ggplot(e2.m, aes(x=date, y=value, group=variable)) +
-      geom_line(col='blue')  +
+p4 <- ggplot(e2.m, aes(x=date, y=value, group=variable, col=variable)) +
+      geom_line()  +
       ylab("Death by cause") +  #add y axis label
       xlab("Date") +   #add x axis label
       theme_classic() +  #choose a 'theme'
       geom_vline(xintercept=as.Date('2006-01-01'), col='gray', lty=2) + #add reference line for vaccine introduction
-      facet_wrap(~Age.group, scales='free_y') + #different plot for each age group, each with unique scale (scale='free')
+      facet_wrap(~agec, scales='free_y') + #different plot for each age group, each with unique scale (scale='free')
       theme(panel.spacing= unit(2,'lines') , axis.text.x=element_text(angle=90))
 
 p4
