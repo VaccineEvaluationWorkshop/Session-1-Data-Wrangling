@@ -1,5 +1,5 @@
 ---
-title: "Country-specific analysis of individual-level data"
+title: "Data wrangling"
 author: "Dan Weinberger"
 date: "May 13, 2019"
 output: html_document
@@ -20,8 +20,12 @@ library(dplyr)
 library(tidyr)
 ```
 
+
+## Background
+The data used in this exercise were collected as part of an effort led by the Pan American Health Organization to evaluate the impacts of Pneumococcal Conjugate Vaccines on mortality in 10 countries in Latin America (see Oliveira and Shioda et al., CID 2021). The data in this example is drawn from a national mortality registry in Mexico. We have minimal data for this exercise to maintain confidentiality. Variables are year of death, month of death, age group of the person (0=<2m, 1=2-11m, 2=12-23m, 3=24-59m), and the underlying cause of death ('causa basica'), coded by ICD10.
+
 ## Import data
-These datasets contain the individual-level mortality records for each country. The files were initially stored as Microsoft Excel databases; however the files were quite large and unwieldy, so they have been converted to the R data format (.rds), which stores the data more efficiently.
+The files were initially stored as Microsoft Excel databases; however the files were quite large and unwieldy, so they have been converted to the R data format (.rds), which stores the data more efficiently.
 
 *The last 2 letters on the file name indicate the country*
 
