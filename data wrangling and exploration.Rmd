@@ -51,12 +51,6 @@ Get the variable names of the data
 names(d1)
 ```
 
-Format the date variable
-```{r}
-d1$date<- as.Date( paste0(d1$Year,'-',d1$Month,'-','01' )) #Format the date variable
-```
-
-
 
 ### Then do some basic explorations. 
 
@@ -71,18 +65,18 @@ hist(d1$date, breaks=10)
 ```
 
 ### Which codes are the most commonly used in this database?
-Make a table of the codes, sorted most to least common. Try to modify this and look at the distribution of secondary DX codes (e.g., DX2,)
+Make a table of the codes, sorted most to least common. Try to modify this and look at the distribution of secondary DX codes (e.g., DX2,). To look up ICD10 codes, you can use https://www.icd10data.com/ or other online resources
 
 ```{r freq.codes, echo=FALSE}
 tab1 <- table(d1$dx1)
 
-sort(tab1, decreasing=T)
+sort(tab1, decreasing=T)[1:100] #View top 200 codes
 
 ```
 
 ## And let's make a code for each of the ICD10 chapters to see bigger-picture patterns
 ```{r}
-chapter.prim<-substr(d1$dx1,1,1)
+chapter.prim <- substr(d1$dx1,1,1)
 ```
 
 **Remember** if you ever want to see the full data frame, just type "View(DATAFRAMENAME) so in this case, View(d1)
@@ -128,8 +122,12 @@ d2 <- d1 %>% #creating a new data frame called 'd2', input data frame d1
     group_by(date) %>%    #group by date
     summarize('j12_j18' = sum(j12_j18) )  #take the sum of j12_18 across all values of the data
 
-
 ```
+
+```{r}
+head(d2)
+```
+
 
 ## Plot your time series
 
@@ -165,7 +163,7 @@ Let's make it look nicer...
 Generate some labels that can be used later for plotting
 ```{r}
 #Create labels we can use 
-age.labels<-c('<2m','2-11m','12-23m','24-59m')
+age.labels <- c('<2m','2-11m','12-23m','24-59m')
 ```
 
 Aggregate variable J12_18 by age group and date
@@ -390,11 +388,16 @@ e2 <- d1 %>%
 names(e2)[1:2] <- c('agec','date')
   
 ```
+```{r}
+head(e2)
+```
 
 Check the structure of the data
 ```{r}
 str(e2)
 ```
+
+
 
 **Important note **
 It is critical for the analysis that every time period for every stratum is represented. If there were no case/deaths that occur for a particular group in a given time period, a 0 should be included. One way to do this is wih the complete() function. for example if we want to make sure j12_18 and A15_19 columns have a row for each age group and date combination:
@@ -416,6 +419,8 @@ e2 <-  e2   %>%
   ungroup()
 
 ```
+
+
 ## Just about ready to start some analyses
 
 We just need to do some data transformations. To do this, we will use some pipes...we will group by age, then log transform and scale the variables(mean=0, sd=1)
