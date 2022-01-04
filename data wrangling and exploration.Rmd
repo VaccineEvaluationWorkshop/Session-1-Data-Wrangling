@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 if (!require("devtools")) {
   install.packages("devtools")
 }
-devtools::install_github("weinbergerlab/ExcessILI", upgrade =  F)
+#devtools::install_github("weinbergerlab/ExcessILI", upgrade =  F)
 library(ExcessILI)
 library(ggplot2)
 library(reshape2)
@@ -388,6 +388,8 @@ e2 <- d1 %>%
 names(e2)[1:2] <- c('agec','date')
   
 ```
+
+
 ```{r}
 head(e2)
 ```
@@ -462,6 +464,33 @@ log_var_names <- names(e2)[grep('log_',names(e2))]  #grep searches for the strin
 e2.m <- reshape2::melt(e2[,c('agec','date',log_var_names)], id.vars=c('agec','date'))
 
 ```
+
+Fun with reshaping
+
+```{r}
+
+test1 <- reshape2::dcast(e2.m, agec+date~ variable )
+
+test2 <- reshape2::dcast(e2.m, date~ agec+ variable )
+
+test3 <- reshape2::acast(e2.m, date~ agec ~ variable )
+
+test3[ ,'0', 'log_all.visits' ]
+
+test3['2000-01-01' ,,  ]
+
+```
+
+
+clean and output data as a csv
+
+```{r}
+out.data <- e2[ ,c('agec','date',log_var_names)]
+
+write.csv(out.data, './Data/out.data.csv')
+```
+
+
 
 Plot the controls
 
